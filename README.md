@@ -7,6 +7,8 @@ A 3D platformer built with JavaScript and three.js. Jump across floating platfor
 ## Controls
 - Move: W A S D or arrow keys
 - Jump: Space
+   - Restart: R
+   - Next level: Enter (after reaching the goal)
 
 ## Features
 - 3D world with a third-person camera
@@ -16,6 +18,8 @@ A 3D platformer built with JavaScript and three.js. Jump across floating platfor
    - Collectible coins with a score counter
    - Timer with best time saved in your browser
    - Moving platforms that carry you along
+      - Two levels with their own best times
+   - Animated character, shadow, clouds and a sky that changes colour
 
 ## How to run
 Open `index.html` in any browser. No install needed.
