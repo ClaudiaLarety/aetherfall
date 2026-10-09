@@ -7,15 +7,20 @@
 <style>
   body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
   #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; }
-  #msg { position: absolute; top: 40%; width: 100%; text-align: center; color: white; font-size: 3rem; font-weight: bold; text-shadow: 2px 2px 6px black; }
+  #msg { position: absolute; top: 38%; width: 100%; text-align: center; color: white; font-size: 3rem; font-weight: bold; text-shadow: 2px 2px 6px black; }
 </style>
 </head>
 <body>
-<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space<br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
+<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space &nbsp;|&nbsp; Restart: R<br>Level: <span id="level">1</span><br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
 <div id="msg"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const msg = document.getElementById("msg");
+const scoreEl = document.getElementById("score");
+const totalEl = document.getElementById("total");
+const levelEl = document.getElementById("level");
+const timerEl = document.getElementById("timer");
+const bestEl = document.getElementById("best");
 
 const scene = new THREE.Scene();
 const skyLow = new THREE.Color(0x87ceeb);
@@ -34,33 +39,38 @@ const sun = new THREE.DirectionalLight(0xffffff, 0.8);
 sun.position.set(10, 20, 10);
 scene.add(sun);
 
-// Platforms: x, y, z (centre), width, height, depth
+// Levels. Each platform: x, y, z (centre), width, height, depth
 // Moving platforms add: axis ("x" or "z"), range, speed
-const platformData = [
-  [0, 0, 0, 12, 1, 12],
-  [0, 1, -12, 8, 1, 8],
-  [6, 2, -21, 8, 1, 8, "x", 4, 1.2],
-  [0, 3, -30, 7, 1, 7],
-  [-7, 4, -39, 7, 1, 7, "x", 4, 1.5],
-  [0, 5, -48, 10, 1, 10]
+const levels = [
+  {
+    name: "Sky Steps",
+    data: [
+      [0, 0, 0, 12, 1, 12],
+      [0, 1, -12, 8, 1, 8],
+      [6, 2, -21, 8, 1, 8, "x", 4, 1.2],
+      [0, 3, -30, 7, 1, 7],
+      [-7, 4, -39, 7, 1, 7, "x", 4, 1.5],
+      [0, 5, -48, 10, 1, 10]
+    ]
+  },
+  {
+    name: "Cloud Run",
+    data: [
+      [0, 0, 0, 10, 1, 10],
+      [0, 1, -12, 6, 1, 6],
+      [0, 2, -21, 5, 1, 5, "x", 5, 1.5],
+      [8, 3, -29, 5, 1, 5],
+      [0, 4, -37, 4, 1, 4, "z", 3, 1.8],
+      [-8, 5, -46, 4, 1, 4],
+      [0, 6, -54, 5, 1, 5, "x", 4, 2],
+      [0, 7, -64, 8, 1, 8]
+    ]
+  }
 ];
-const platforms = [];
-platformData.forEach(([x, y, z, w, h, d, axis, range, speed], i) => {
-  const isGoal = i === platformData.length - 1;
-  let color = 0x2ecc71;
-  if (axis) color = 0x3498db;
-  if (isGoal) color = 0xf1c40f;
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: color }));
-  mesh.position.set(x, y, z);
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(geo),
-    new THREE.LineBasicMaterial({ color: 0x1b2631 })
-  );
-  mesh.add(edges);
-  scene.add(mesh);
-  platforms.push({ x, y, z, w, h, d, baseX: x, baseZ: z, axis, range, speed, dx: 0, dz: 0, mesh });
-});
+let levelIndex = 0;
+let platforms = [];
+let coins = [];
+let collected = 0;
 
 // Clouds
 function makeCloud(x, y, z, s) {
@@ -81,25 +91,12 @@ const clouds = [
   makeCloud(20, 6, -25, 1.5),
   makeCloud(-25, 8, -40, 1.8),
   makeCloud(22, 10, -55, 1.4),
+  makeCloud(10, 11, -70, 1.6),
+  makeCloud(-20, 9, -62, 1.5),
   makeCloud(0, -6, -20, 2),
-  makeCloud(-14, -8, -45, 2.2)
+  makeCloud(-14, -8, -45, 2.2),
+  makeCloud(14, -9, -60, 2)
 ];
-
-// Coins
-const coins = [];
-platformData.forEach(([x, y, z, w, h, d], i) => {
-  if (i === 0) return;
-  const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.12, 20);
-  geo.rotateX(Math.PI / 2);
-  const coin = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xffd700 }));
-  coin.position.set(x, y + h / 2 + 1, z);
-  coin.userData.plat = platforms[i];
-  scene.add(coin);
-  coins.push(coin);
-});
-let collected = 0;
-const scoreEl = document.getElementById("score");
-document.getElementById("total").textContent = coins.length;
 
 // Player character (centre of the group is the centre of a 1x1x1 box)
 const player = new THREE.Group();
@@ -138,7 +135,6 @@ const armR = makeLimb(0.4, 0.17, 0.14, 0.4, skinMat);
 
 scene.add(player);
 const start = { x: 0, y: 1.5, z: 0 };
-player.position.set(start.x, start.y, start.z);
 let walkPhase = 0;
 
 // Blob shadow under the player
@@ -155,19 +151,80 @@ const SPEED = 8;
 const JUMP = 13;
 const GRAVITY = 28;
 
-const keys = {};
-window.addEventListener("keydown", e => { keys[e.code] = true; });
-window.addEventListener("keyup", e => { keys[e.code] = false; });
-
 let timerRunning = false;
 let finished = false;
 let elapsed = 0;
 let gameTime = 0;
-const timerEl = document.getElementById("timer");
-const bestEl = document.getElementById("best");
 let best = null;
-try { best = parseFloat(localStorage.getItem("aetherfallBest")) || null; } catch (e) {}
-if (best) bestEl.textContent = best.toFixed(1);
+
+function bestKey() {
+  return levelIndex === 0 ? "aetherfallBest" : "aetherfallBest" + (levelIndex + 1);
+}
+
+function loadLevel(index) {
+  levelIndex = index;
+  platforms.forEach(p => scene.remove(p.mesh));
+  coins.forEach(c => scene.remove(c));
+  platforms = [];
+  coins = [];
+  const data = levels[index].data;
+
+  data.forEach(([x, y, z, w, h, d, axis, range, speed], i) => {
+    const isGoal = i === data.length - 1;
+    let color = 0x2ecc71;
+    if (axis) color = 0x3498db;
+    if (isGoal) color = 0xf1c40f;
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: color }));
+    mesh.position.set(x, y, z);
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geo),
+      new THREE.LineBasicMaterial({ color: 0x1b2631 })
+    );
+    mesh.add(edges);
+    scene.add(mesh);
+    platforms.push({ x, y, z, w, h, d, baseX: x, baseZ: z, axis, range, speed, dx: 0, dz: 0, mesh });
+  });
+
+  data.forEach(([x, y, z, w, h, d], i) => {
+    if (i === 0) return;
+    const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.12, 20);
+    geo.rotateX(Math.PI / 2);
+    const coin = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xffd700 }));
+    coin.position.set(x, y + h / 2 + 1, z);
+    coin.userData.plat = platforms[i];
+    scene.add(coin);
+    coins.push(coin);
+  });
+
+  collected = 0;
+  scoreEl.textContent = "0";
+  totalEl.textContent = coins.length;
+  levelEl.textContent = (index + 1) + " - " + levels[index].name;
+
+  player.position.set(start.x, start.y, start.z);
+  player.rotation.y = 0;
+  vy = 0;
+  onGround = false;
+  timerRunning = false;
+  finished = false;
+  elapsed = 0;
+  gameTime = 0;
+  timerEl.textContent = "0.0";
+  msg.innerHTML = "";
+
+  best = null;
+  try { best = parseFloat(localStorage.getItem(bestKey())) || null; } catch (e) {}
+  bestEl.textContent = best ? best.toFixed(1) : "--";
+}
+
+const keys = {};
+window.addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (e.code === "KeyR") loadLevel(levelIndex);
+  if (e.code === "Enter" && finished) loadLevel((levelIndex + 1) % levels.length);
+});
+window.addEventListener("keyup", e => { keys[e.code] = false; });
 
 function update(dt) {
   gameTime += dt;
@@ -231,14 +288,17 @@ function update(dt) {
       onGround = true;
       if (i === platforms.length - 1 && !finished) {
         finished = true;
-        let text = "You made it! 🎉 " + elapsed.toFixed(1) + "s";
+        const lastLevel = levelIndex === levels.length - 1;
+        let text = lastLevel ? "You finished Aetherfall! 🎉" : "Level complete! 🎉";
+        text += "<br>" + elapsed.toFixed(1) + "s";
         if (!best || elapsed < best) {
           best = elapsed;
           bestEl.textContent = best.toFixed(1);
-          try { localStorage.setItem("aetherfallBest", best); } catch (e) {}
+          try { localStorage.setItem(bestKey(), best); } catch (e) {}
           text += " (new best!)";
         }
-        msg.textContent = text;
+        text += '<br><span style="font-size:1.4rem">' + (lastLevel ? "Press Enter to play again" : "Press Enter for the next level") + "</span>";
+        msg.innerHTML = text;
       }
     }
   });
@@ -287,7 +347,7 @@ function update(dt) {
   if (player.position.y < -15) {
     player.position.set(start.x, start.y, start.z);
     vy = 0;
-    msg.textContent = "";
+    msg.innerHTML = "";
     timerRunning = false;
     finished = false;
     elapsed = 0;
@@ -296,7 +356,7 @@ function update(dt) {
 }
 
 function updateSky() {
-  const t = Math.min(Math.max(player.position.y / 6, 0), 1);
+  const t = Math.min(Math.max(player.position.y / 7, 0), 1);
   skyNow.lerpColors(skyLow, skyHigh, t);
   scene.fog.color.copy(skyNow);
 }
@@ -305,6 +365,8 @@ function updateCamera() {
   camera.position.set(player.position.x, player.position.y + 6, player.position.z + 10);
   camera.lookAt(player.position.x, player.position.y, player.position.z - 3);
 }
+
+loadLevel(0);
 
 const clock = new THREE.Clock();
 function animate() {
