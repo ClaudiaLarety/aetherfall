@@ -11,7 +11,7 @@
 </style>
 </head>
 <body>
-<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space<br>Coins: <span id="score">0</span> / <span id="total">0</span></div>
+<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space<br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
 <div id="msg"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -64,6 +64,7 @@ platformData.forEach(([x, y, z, w, h, d], i) => {
 let collected = 0;
 const scoreEl = document.getElementById("score");
 document.getElementById("total").textContent = coins.length;
+
 const player = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
   new THREE.MeshLambertMaterial({ color: 0xe74c3c })
@@ -82,6 +83,15 @@ const keys = {};
 window.addEventListener("keydown", e => { keys[e.code] = true; });
 window.addEventListener("keyup", e => { keys[e.code] = false; });
 
+let timerRunning = false;
+let finished = false;
+let elapsed = 0;
+const timerEl = document.getElementById("timer");
+const bestEl = document.getElementById("best");
+let best = null;
+try { best = parseFloat(localStorage.getItem("aetherfallBest")) || null; } catch (e) {}
+if (best) bestEl.textContent = best.toFixed(1);
+
 function update(dt) {
   let dx = 0;
   let dz = 0;
@@ -99,6 +109,12 @@ function update(dt) {
     onGround = false;
   }
 
+  if (!finished && (dx !== 0 || dz !== 0 || keys["Space"])) timerRunning = true;
+  if (timerRunning && !finished) {
+    elapsed += dt;
+    timerEl.textContent = elapsed.toFixed(1);
+  }
+
   const prevBottom = player.position.y - 0.5;
   vy -= GRAVITY * dt;
   player.position.y += vy * dt;
@@ -113,11 +129,21 @@ function update(dt) {
       player.position.y = top + 0.5;
       vy = 0;
       onGround = true;
-      if (i === platforms.length - 1) msg.textContent = "You made it! 🎉";
+      if (i === platforms.length - 1 && !finished) {
+        finished = true;
+        let text = "You made it! 🎉 " + elapsed.toFixed(1) + "s";
+        if (!best || elapsed < best) {
+          best = elapsed;
+          bestEl.textContent = best.toFixed(1);
+          try { localStorage.setItem("aetherfallBest", best); } catch (e) {}
+          text += " (new best!)";
+        }
+        msg.textContent = text;
+      }
     }
   });
 
-   for (let i = coins.length - 1; i >= 0; i--) {
+  for (let i = coins.length - 1; i >= 0; i--) {
     coins[i].rotation.y += dt * 3;
     if (coins[i].position.distanceTo(player.position) < 1.1) {
       scene.remove(coins[i]);
@@ -126,10 +152,15 @@ function update(dt) {
       scoreEl.textContent = collected;
     }
   }
-   if (player.position.y < -15) {
+
+  if (player.position.y < -15) {
     player.position.set(start.x, start.y, start.z);
     vy = 0;
     msg.textContent = "";
+    timerRunning = false;
+    finished = false;
+    elapsed = 0;
+    timerEl.textContent = "0.0";
   }
 }
 
