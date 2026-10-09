@@ -11,7 +11,7 @@
 </style>
 </head>
 <body>
-<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space</div>
+<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space<br>Coins: <span id="score">0</span> / <span id="total">0</span></div>
 <div id="msg"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -51,6 +51,19 @@ platformData.forEach(([x, y, z, w, h, d], i) => {
   platforms.push({ x, y, z, w, h, d });
 });
 
+const coins = [];
+platformData.forEach(([x, y, z, w, h, d], i) => {
+  if (i === 0) return;
+  const geo = new THREE.CylinderGeometry(0.4, 0.4, 0.12, 20);
+  geo.rotateX(Math.PI / 2);
+  const coin = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xffd700 }));
+  coin.position.set(x, y + h / 2 + 1, z);
+  scene.add(coin);
+  coins.push(coin);
+});
+let collected = 0;
+const scoreEl = document.getElementById("score");
+document.getElementById("total").textContent = coins.length;
 const player = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
   new THREE.MeshLambertMaterial({ color: 0xe74c3c })
@@ -104,7 +117,16 @@ function update(dt) {
     }
   });
 
-  if (player.position.y < -15) {
+   for (let i = coins.length - 1; i >= 0; i--) {
+    coins[i].rotation.y += dt * 3;
+    if (coins[i].position.distanceTo(player.position) < 1.1) {
+      scene.remove(coins[i]);
+      coins.splice(i, 1);
+      collected++;
+      scoreEl.textContent = collected;
+    }
+  }
+   if (player.position.y < -15) {
     player.position.set(start.x, start.y, start.z);
     vy = 0;
     msg.textContent = "";
