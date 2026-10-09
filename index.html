@@ -2,17 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Aetherfall</title>
 <style>
-  body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+  html, body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
   #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; }
   #msg { position: absolute; top: 38%; width: 100%; text-align: center; color: white; font-size: 3rem; font-weight: bold; text-shadow: 2px 2px 6px black; }
+  #stick { position: absolute; left: 25px; bottom: 25px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.6); display: none; touch-action: none; }
+  #knob { position: absolute; left: 40px; top: 40px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.75); }
+  #jumpBtn { position: absolute; right: 25px; bottom: 35px; width: 100px; height: 100px; border-radius: 50%; background: rgba(231,76,60,0.6); border: 2px solid rgba(255,255,255,0.8); color: white; font-weight: bold; font-size: 1.2rem; display: none; align-items: center; justify-content: center; touch-action: none; }
+  #restartBtn { position: absolute; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.4); color: white; font-size: 1.6rem; display: none; align-items: center; justify-content: center; touch-action: none; }
 </style>
 </head>
 <body>
-<div id="info"><b>Aetherfall</b><br>Move: W A S D or arrow keys<br>Jump: Space &nbsp;|&nbsp; Restart: R<br>Level: <span id="level">1</span><br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
+<div id="info"><b>Aetherfall</b><br><span id="help">Move: W A S D or arrow keys<br>Jump: Space &nbsp;|&nbsp; Restart: R<br></span>Level: <span id="level">1</span><br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
 <div id="msg"></div>
+<div id="stick"><div id="knob"></div></div>
+<div id="jumpBtn">JUMP</div>
+<div id="restartBtn">&#8635;</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const msg = document.getElementById("msg");
@@ -31,6 +38,7 @@ scene.fog = new THREE.Fog(0x87ceeb, 40, 110);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
@@ -71,6 +79,80 @@ let levelIndex = 0;
 let platforms = [];
 let coins = [];
 let collected = 0;
+
+// Touch controls
+const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+const stickEl = document.getElementById("stick");
+const knobEl = document.getElementById("knob");
+const jumpBtn = document.getElementById("jumpBtn");
+const restartBtn = document.getElementById("restartBtn");
+let stickX = 0;
+let stickY = 0;
+let stickId = null;
+let touchJump = false;
+
+if (isTouch) {
+  stickEl.style.display = "block";
+  jumpBtn.style.display = "flex";
+  restartBtn.style.display = "flex";
+  document.getElementById("help").style.display = "none";
+}
+
+function moveStick(t) {
+  const r = stickEl.getBoundingClientRect();
+  let x = t.clientX - (r.left + r.width / 2);
+  let y = t.clientY - (r.top + r.height / 2);
+  const max = r.width / 2;
+  const len = Math.hypot(x, y);
+  if (len > max) {
+    x = (x / len) * max;
+    y = (y / len) * max;
+  }
+  knobEl.style.left = (r.width / 2 - 25 + x) + "px";
+  knobEl.style.top = (r.height / 2 - 25 + y) + "px";
+  stickX = x / max;
+  stickY = y / max;
+}
+
+function resetStick() {
+  stickId = null;
+  stickX = 0;
+  stickY = 0;
+  knobEl.style.left = "40px";
+  knobEl.style.top = "40px";
+}
+
+stickEl.addEventListener("touchstart", e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  stickId = t.identifier;
+  moveStick(t);
+}, { passive: false });
+stickEl.addEventListener("touchmove", e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) moveStick(t);
+  }
+}, { passive: false });
+function endStick(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) resetStick();
+  }
+}
+stickEl.addEventListener("touchend", endStick);
+stickEl.addEventListener("touchcancel", endStick);
+
+jumpBtn.addEventListener("touchstart", e => { e.preventDefault(); touchJump = true; }, { passive: false });
+jumpBtn.addEventListener("touchend", () => { touchJump = false; });
+jumpBtn.addEventListener("touchcancel", () => { touchJump = false; });
+
+restartBtn.addEventListener("touchstart", e => { e.preventDefault(); loadLevel(levelIndex); }, { passive: false });
+msg.addEventListener("touchstart", e => {
+  if (finished) {
+    e.preventDefault();
+    loadLevel((levelIndex + 1) % levels.length);
+  }
+}, { passive: false });
 
 // Clouds
 function makeCloud(x, y, z, s) {
@@ -252,19 +334,25 @@ function update(dt) {
   if (keys["KeyS"] || keys["ArrowDown"]) dz += 1;
   if (keys["KeyA"] || keys["ArrowLeft"]) dx -= 1;
   if (keys["KeyD"] || keys["ArrowRight"]) dx += 1;
-  const moving = dx !== 0 || dz !== 0;
+  if (Math.hypot(stickX, stickY) > 0.15) {
+    dx += stickX;
+    dz += stickY;
+  }
+  const len = Math.hypot(dx, dz);
+  const moving = len > 0.01;
   if (moving) {
-    const len = Math.hypot(dx, dz);
-    player.position.x += (dx / len) * SPEED * dt;
-    player.position.z += (dz / len) * SPEED * dt;
+    const mag = Math.min(len, 1);
+    player.position.x += (dx / len) * mag * SPEED * dt;
+    player.position.z += (dz / len) * mag * SPEED * dt;
     player.rotation.y = Math.atan2(-dx, -dz);
   }
-  if (keys["Space"] && onGround) {
+  const jumpPressed = keys["Space"] || touchJump;
+  if (jumpPressed && onGround) {
     vy = JUMP;
     onGround = false;
   }
 
-  if (!finished && (moving || keys["Space"])) timerRunning = true;
+  if (!finished && (moving || jumpPressed)) timerRunning = true;
   if (timerRunning && !finished) {
     elapsed += dt;
     timerEl.textContent = elapsed.toFixed(1);
@@ -297,7 +385,9 @@ function update(dt) {
           try { localStorage.setItem(bestKey(), best); } catch (e) {}
           text += " (new best!)";
         }
-        text += '<br><span style="font-size:1.4rem">' + (lastLevel ? "Press Enter to play again" : "Press Enter for the next level") + "</span>";
+        let hint = lastLevel ? "play again" : "go to the next level";
+        hint = (isTouch ? "Tap here to " : "Press Enter to ") + hint;
+        text += '<br><span style="font-size:1.4rem">' + hint + "</span>";
         msg.innerHTML = text;
       }
     }
@@ -362,7 +452,10 @@ function updateSky() {
 }
 
 function updateCamera() {
-  camera.position.set(player.position.x, player.position.y + 6, player.position.z + 10);
+  const portrait = camera.aspect < 1;
+  const up = portrait ? 8 : 6;
+  const back = portrait ? 14 : 10;
+  camera.position.set(player.position.x, player.position.y + up, player.position.z + back);
   camera.lookAt(player.position.x, player.position.y, player.position.z - 3);
 }
 
