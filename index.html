@@ -8,10 +8,10 @@
   html, body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
   #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 6px; }
   #msg { position: absolute; top: 38%; width: 100%; text-align: center; color: white; font-size: 3rem; font-weight: bold; text-shadow: 2px 2px 6px black; }
-  #stick { position: absolute; left: 25px; bottom: 25px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.6); display: none; touch-action: none; }
+  #stick { position: fixed; left: 25px; bottom: 80px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.6); display: none; touch-action: none; }
   #knob { position: absolute; left: 40px; top: 40px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.75); }
-  #jumpBtn { position: absolute; right: 25px; bottom: 35px; width: 100px; height: 100px; border-radius: 50%; background: rgba(231,76,60,0.6); border: 2px solid rgba(255,255,255,0.8); color: white; font-weight: bold; font-size: 1.2rem; display: none; align-items: center; justify-content: center; touch-action: none; }
-  #restartBtn { position: absolute; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.4); color: white; font-size: 1.6rem; display: none; align-items: center; justify-content: center; touch-action: none; }
+  #jumpBtn { position: fixed; right: 25px; bottom: 90px; width: 100px; height: 100px; border-radius: 50%; background: rgba(231,76,60,0.6); border: 2px solid rgba(255,255,255,0.8); color: white; font-weight: bold; font-size: 1.2rem; display: none; align-items: center; justify-content: center; touch-action: none; }
+  #restartBtn { position: fixed; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.4); color: white; font-size: 1.6rem; display: none; align-items: center; justify-content: center; touch-action: none; }
 </style>
 </head>
 <body>
@@ -48,7 +48,7 @@ sun.position.set(10, 20, 10);
 scene.add(sun);
 
 // Levels. Each platform: x, y, z (centre), width, height, depth
-// Moving platforms add: axis ("x" or "z"), range, speed
+// Optional 7th value: "x" or "z" = moving (then range, speed), "c" = crumbling
 const levels = [
   {
     name: "Sky Steps",
@@ -72,6 +72,19 @@ const levels = [
       [-8, 5, -46, 4, 1, 4],
       [0, 6, -54, 5, 1, 5, "x", 4, 2],
       [0, 7, -64, 8, 1, 8]
+    ]
+  },
+  {
+    name: "Crumble Peak",
+    data: [
+      [0, 0, 0, 10, 1, 10],
+      [0, 1, -11, 5, 1, 5, "c"],
+      [0, 2, -18, 4, 1, 4, "c"],
+      [6, 3, -25, 4, 1, 4, "c"],
+      [0, 4, -32, 4, 1, 4, "x", 4, 1.5],
+      [-7, 5, -40, 4, 1, 4, "c"],
+      [0, 6, -47, 4, 1, 4, "c"],
+      [0, 7, -56, 8, 1, 8]
     ]
   }
 ];
@@ -253,8 +266,11 @@ function loadLevel(index) {
 
   data.forEach(([x, y, z, w, h, d, axis, range, speed], i) => {
     const isGoal = i === data.length - 1;
+    const crumble = axis === "c";
+    const mover = axis === "x" || axis === "z";
     let color = 0x2ecc71;
-    if (axis) color = 0x3498db;
+    if (mover) color = 0x3498db;
+    if (crumble) color = 0xe67e22;
     if (isGoal) color = 0xf1c40f;
     const geo = new THREE.BoxGeometry(w, h, d);
     const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: color }));
@@ -265,7 +281,17 @@ function loadLevel(index) {
     );
     mesh.add(edges);
     scene.add(mesh);
-    platforms.push({ x, y, z, w, h, d, baseX: x, baseZ: z, axis, range, speed, dx: 0, dz: 0, mesh });
+    platforms.push({
+      x, y, z, w, h, d,
+      baseX: x, baseZ: z,
+      axis: mover ? axis : null,
+      range, speed,
+      crumble: crumble,
+      state: "solid",
+      timer: 0,
+      dx: 0, dz: 0,
+      mesh
+    });
   });
 
   data.forEach(([x, y, z, w, h, d], i) => {
@@ -311,6 +337,25 @@ window.addEventListener("keyup", e => { keys[e.code] = false; });
 function update(dt) {
   gameTime += dt;
   platforms.forEach(p => {
+    if (p.crumble) {
+      if (p.state === "shaking") {
+        p.timer -= dt;
+        p.mesh.position.x = p.x + (Math.random() - 0.5) * 0.15;
+        if (p.timer <= 0) {
+          p.state = "gone";
+          p.timer = 3;
+          p.mesh.visible = false;
+        }
+      } else if (p.state === "gone") {
+        p.timer -= dt;
+        if (p.timer <= 0) {
+          p.state = "solid";
+          p.mesh.visible = true;
+          p.mesh.position.x = p.x;
+        }
+      }
+      return;
+    }
     if (!p.axis) return;
     const offset = Math.sin(gameTime * p.speed) * p.range;
     const newX = p.axis === "x" ? p.baseX + offset : p.baseX;
@@ -364,6 +409,7 @@ function update(dt) {
   onGround = false;
 
   platforms.forEach((p, i) => {
+    if (p.crumble && p.state === "gone") return;
     const top = p.y + p.h / 2;
     const overX = Math.abs(player.position.x - p.x) < p.w / 2 + 0.5;
     const overZ = Math.abs(player.position.z - p.z) < p.d / 2 + 0.5;
@@ -374,6 +420,10 @@ function update(dt) {
       player.position.z += p.dz;
       vy = 0;
       onGround = true;
+      if (p.crumble && p.state === "solid") {
+        p.state = "shaking";
+        p.timer = 0.9;
+      }
       if (i === platforms.length - 1 && !finished) {
         finished = true;
         const lastLevel = levelIndex === levels.length - 1;
@@ -405,6 +455,7 @@ function update(dt) {
   let shadowY = null;
   const feet = player.position.y - 0.5;
   platforms.forEach(p => {
+    if (p.crumble && p.state === "gone") return;
     const top = p.y + p.h / 2;
     const overX = Math.abs(player.position.x - p.x) < p.w / 2;
     const overZ = Math.abs(player.position.z - p.z) < p.d / 2;
@@ -435,13 +486,7 @@ function update(dt) {
   }
 
   if (player.position.y < -15) {
-    player.position.set(start.x, start.y, start.z);
-    vy = 0;
-    msg.innerHTML = "";
-    timerRunning = false;
-    finished = false;
-    elapsed = 0;
-    timerEl.textContent = "0.0";
+    loadLevel(levelIndex);
   }
 }
 
