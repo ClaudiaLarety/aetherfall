@@ -504,7 +504,7 @@ function updateCamera() {
   camera.lookAt(player.position.x, player.position.y, player.position.z - 3);
 }
 
-loadLevel(0);
+loadLevel(Math.min(Math.max((parseInt(new URLSearchParams(location.search).get("level")) || 1) - 1, 0), levels.length - 1));
 
 const clock = new THREE.Clock();
 function animate() {
