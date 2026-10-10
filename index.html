@@ -12,14 +12,16 @@
   #knob { position: absolute; left: 40px; top: 40px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.75); }
   #jumpBtn { position: fixed; right: 25px; bottom: 90px; width: 100px; height: 100px; border-radius: 50%; background: rgba(231,76,60,0.6); border: 2px solid rgba(255,255,255,0.8); color: white; font-weight: bold; font-size: 1.2rem; display: none; align-items: center; justify-content: center; touch-action: none; }
   #restartBtn { position: fixed; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.4); color: white; font-size: 1.6rem; display: none; align-items: center; justify-content: center; touch-action: none; }
+  #soundBtn { position: fixed; top: 10px; right: 10px; width: 48px; height: 48px; border-radius: 50%; background: rgba(0,0,0,0.4); color: white; font-size: 1.4rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 </style>
 </head>
 <body>
-<div id="info"><b>Aetherfall</b><br><span id="help">Move: W A S D or arrow keys<br>Jump: Space &nbsp;|&nbsp; Restart: R<br></span>Level: <span id="level">1</span><br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
+<div id="info"><b>Aetherfall</b><br><span id="help">Move: W A S D or arrow keys<br>Jump: Space &nbsp;|&nbsp; Restart: R &nbsp;|&nbsp; Mute: M<br></span>Level: <span id="level">1</span><br>Coins: <span id="score">0</span> / <span id="total">0</span><br>Time: <span id="timer">0.0</span>s<br>Best: <span id="best">--</span></div>
 <div id="msg"></div>
 <div id="stick"><div id="knob"></div></div>
 <div id="jumpBtn">JUMP</div>
 <div id="restartBtn">&#8635;</div>
+<div id="soundBtn">🔊</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const msg = document.getElementById("msg");
@@ -28,6 +30,63 @@ const totalEl = document.getElementById("total");
 const levelEl = document.getElementById("level");
 const timerEl = document.getElementById("timer");
 const bestEl = document.getElementById("best");
+const soundBtn = document.getElementById("soundBtn");
+
+// Sound effects (made with the Web Audio API, no files needed)
+let audioCtx = null;
+let muted = false;
+try { muted = localStorage.getItem("aetherfallMuted") === "1"; } catch (e) {}
+soundBtn.textContent = muted ? "🔇" : "🔊";
+
+function initAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+}
+
+function tone(freq, endFreq, dur, type, vol, delay) {
+  if (!audioCtx || muted) return;
+  const t0 = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || "square";
+  osc.frequency.setValueAtTime(freq, t0);
+  if (endFreq && endFreq !== freq) osc.frequency.exponentialRampToValueAtTime(endFreq, t0 + dur);
+  gain.gain.setValueAtTime(vol || 0.1, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t0);
+  osc.stop(t0 + dur);
+}
+
+const sfx = {
+  jump: () => tone(300, 650, 0.15, "square", 0.07),
+  coin: () => {
+    tone(988, 988, 0.08, "square", 0.07);
+    tone(1319, 1319, 0.18, "square", 0.07, 0.08);
+  },
+  land: () => tone(140, 60, 0.08, "sine", 0.15),
+  crumble: () => tone(120, 40, 0.3, "sawtooth", 0.07),
+  fall: () => tone(500, 80, 0.5, "triangle", 0.12),
+  win: () => {
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.2, "square", 0.07, i * 0.12));
+  }
+};
+
+function toggleMute() {
+  muted = !muted;
+  soundBtn.textContent = muted ? "🔇" : "🔊";
+  try { localStorage.setItem("aetherfallMuted", muted ? "1" : "0"); } catch (e) {}
+}
+soundBtn.addEventListener("click", () => {
+  initAudio();
+  toggleMute();
+});
+window.addEventListener("touchstart", initAudio, { passive: true });
+window.addEventListener("touchend", initAudio, { passive: true });
+window.addEventListener("mousedown", initAudio);
 
 const scene = new THREE.Scene();
 const skyLow = new THREE.Color(0x87ceeb);
@@ -108,6 +167,7 @@ if (isTouch) {
   stickEl.style.display = "block";
   jumpBtn.style.display = "flex";
   restartBtn.style.display = "flex";
+  soundBtn.style.right = "68px";
   document.getElementById("help").style.display = "none";
 }
 
@@ -328,8 +388,10 @@ function loadLevel(index) {
 
 const keys = {};
 window.addEventListener("keydown", e => {
+  initAudio();
   keys[e.code] = true;
   if (e.code === "KeyR") loadLevel(levelIndex);
+  if (e.code === "KeyM") toggleMute();
   if (e.code === "Enter" && finished) loadLevel((levelIndex + 1) % levels.length);
 });
 window.addEventListener("keyup", e => { keys[e.code] = false; });
@@ -395,6 +457,7 @@ function update(dt) {
   if (jumpPressed && onGround) {
     vy = JUMP;
     onGround = false;
+    sfx.jump();
   }
 
   if (!finished && (moving || jumpPressed)) timerRunning = true;
@@ -406,6 +469,7 @@ function update(dt) {
   const prevBottom = player.position.y - 0.5;
   vy -= GRAVITY * dt;
   player.position.y += vy * dt;
+  const wasOnGround = onGround;
   onGround = false;
 
   platforms.forEach((p, i) => {
@@ -418,14 +482,17 @@ function update(dt) {
       player.position.y = top + 0.5;
       player.position.x += p.dx;
       player.position.z += p.dz;
+      if (!wasOnGround && vy < -4) sfx.land();
       vy = 0;
       onGround = true;
       if (p.crumble && p.state === "solid") {
         p.state = "shaking";
         p.timer = 0.9;
+        sfx.crumble();
       }
       if (i === platforms.length - 1 && !finished) {
         finished = true;
+        sfx.win();
         const lastLevel = levelIndex === levels.length - 1;
         let text = lastLevel ? "You finished Aetherfall! 🎉" : "Level complete! 🎉";
         text += "<br>" + elapsed.toFixed(1) + "s";
@@ -482,10 +549,12 @@ function update(dt) {
       coins.splice(i, 1);
       collected++;
       scoreEl.textContent = collected;
+      sfx.coin();
     }
   }
 
   if (player.position.y < -15) {
+    sfx.fall();
     loadLevel(levelIndex);
   }
 }
